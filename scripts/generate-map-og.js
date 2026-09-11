@@ -325,7 +325,32 @@ async function main() {
       }, []);
   }
 
-  const entries = Object.entries(zipCodes);
+  // Build unique city list from both zip-codes.json and cities.json
+  const seen = new Set();
+  const entries = [];
+
+  // From zip-codes.json
+  for (const [zipCode, data] of Object.entries(zipCodes)) {
+    const city = cityMap[data.city];
+    if (!city) continue;
+    const key = `${zipCode}-${city.slug}`;
+    if (!seen.has(key)) {
+      seen.add(key);
+      entries.push({ zipCode, city });
+    }
+  }
+
+  // From cities.json (catch missing ones)
+  for (const city of cities) {
+    const zipCode = city.zipCode || '';
+    if (!zipCode) continue;
+    const key = `${zipCode}-${city.slug}`;
+    if (!seen.has(key)) {
+      seen.add(key);
+      entries.push({ zipCode, city });
+    }
+  }
+
   const total = entries.length;
   let done = 0;
   let totalSize = 0;
@@ -333,13 +358,11 @@ async function main() {
 
   console.log(`Generating ${total} map OG images...`);
 
-  // Process in batches of 5 (rate limit for tile server)
   const BATCH = 5;
   for (let i = 0; i < entries.length; i += BATCH) {
     const batch = entries.slice(i, i + BATCH);
-    const promises = batch.map(async ([zipCode, data]) => {
-      const city = cityMap[data.city];
-      if (!city || !city.latitude || !city.longitude) return;
+    const promises = batch.map(async ({ zipCode, city }) => {
+      if (!city.latitude || !city.longitude) return;
 
       const provinceName = provinceMap[city.provinceSlug] || city.provinceSlug;
       const nearby = findNearby(city.latitude, city.longitude);
